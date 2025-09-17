@@ -1,5 +1,5 @@
 {
-	"name": "backend-totorial",
+	"name": "backend-tutorial",
 	"version": "1.0.0",
 	"description": "a tutorial project for learning backend development",
 	"type": "module",
@@ -15,6 +15,7 @@
 	"author": "Ashish singh",
 	"license": "ISC",
 	"devDependencies": {
-		"nodemon": "^3.1.10"
+		"nodemon": "^3.1.10",
+		"prettier": "^3.6.2"
 	}
 }
