@@ -1,14 +1,20 @@
 {
-  "name": "backend-totorial",
-  "version": "1.0.0",
-  "description": "a tutorial project for learning backend development",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [
-    "javascript"
-  ],
-  "author": "Ashish singh",
-  "license": "ISC"
+	"name": "backend-totorial",
+	"version": "1.0.0",
+	"description": "a tutorial project for learning backend development",
+	"type": "module",
+	"main": "index.js",
+	"scripts": {
+		"start": "node src/index.js",
+		"dev": "nodemon src/index.js",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [
+		"javascript"
+	],
+	"author": "Ashish singh",
+	"license": "ISC",
+	"devDependencies": {
+		"nodemon": "^3.1.10"
+	}
 }
