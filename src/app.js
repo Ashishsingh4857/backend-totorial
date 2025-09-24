@@ -26,4 +26,11 @@ app.use(express.static("public"));
 // Enable cookie parsing
 app.use(cookieParser());
 
+//routes import
+import userRouter from "./routes/user.routes.js";
+
+//routes declaration
+app.use("/api/v1/users", userRouter); // path or handler
+
+//example url -  http://localhost:3000/api/v1/users/register
 export { app, PORT };
