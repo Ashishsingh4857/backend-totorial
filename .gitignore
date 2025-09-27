@@ -119,3 +119,4 @@ dist
 
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Node,env
+.DS_Store
