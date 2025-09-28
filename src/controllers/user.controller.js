@@ -161,7 +161,8 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   //req.cookie.refreshToken  Encrypted
   // decode
   // compare with db refresh token if both are same generate new token
-  const incomingRefreshToken = req.cookie.refreshToken || req.body.refreshToken;
+  const incomingRefreshToken =
+    req.cookies.refreshToken || req.body.refreshToken;
   if (!incomingRefreshToken) {
     throw new ApiError(401, "unauthorized request");
   }
