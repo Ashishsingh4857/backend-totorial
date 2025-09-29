@@ -220,10 +220,41 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(201, {}, "password changed successfully"));
 });
+
+//get current user
+const getCurrentUser = asyncHandler(async (req, res) => {
+  return res
+    .status(200)
+    .json(new ApiResponse(200, req.user, "User fetched successfully"));
+});
+
+// Update user account details (e.g., fullName, username, email)
+const updateAccountDetails = asyncHandler(async (req, res) => {
+  const { fullName, username, email } = req.body;
+  if (!fullName || !username || !email) {
+    throw new ApiError(400, "At least one field is required to update");
+  }
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: { email: email, fullName: fullName },
+    },
+    { new: true } // return the updated document
+  ).select("-password -refreshToken"); // Exclude password from the response
+
+  if (!user) {
+    throw new ApiError(500, "Something went wrong while updating user");
+  }
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "User updated successfully"));
+});
 export {
   registerUser,
   loginUser,
   logoutUser,
   refreshAccessToken,
   changeCurrentPassword,
+  getCurrentUser,
+  updateAccountDetails,
 };
