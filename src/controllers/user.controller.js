@@ -1,7 +1,10 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  uploadOnCloudinary,
+  destroyOnCloudinary,
+} from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 // Generate Access and Refresh Tokens
@@ -249,6 +252,55 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, user, "User updated successfully"));
 });
+const updateUserAvatar = asyncHandler(async (req, res) => {
+  //req.file => from multer middleware
+  //req.user => from verifyJwt middleware
+  const avatarLocalPath = req.file?.path;
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar file is missing");
+  }
+
+  const avatar = await uploadOnCloudinary(avatarLocalPath); // Upload to Cloudinary
+  if (!avatar.url) {
+    throw new ApiError(400, "Error while uploading avatar");
+  }
+  //TODO: delete old image
+  await destroyOnCloudinary(req.user?.avatar);
+  // Update user's avatar URL in the database
+
+  const user = await User.findByIdAndUpdate(req.user._id, {
+    $set: { avatar: avatar.url },
+  }).select("-password -refreshToken");
+  return res
+    .status(200)
+    .json(ApiResponse(200, user, "Avatar image updated successfully"));
+});
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+  //req.file => from multer middleware
+  //req.user => from verifyJwt middleware
+  const coverImageLocalPath = req.file?.path;
+  if (!coverImageLocalPath) {
+    throw new ApiError(400, "Cover image file is missing");
+  }
+
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath); // Upload to Cloudinary
+  if (!coverImage.url) {
+    throw new ApiError(400, "Error while uploading cover image");
+  }
+  //TODO: delete old image
+  if (req.user?.coverImage) {
+    await destroyOnCloudinary(req.user?.coverImage);
+  }
+  // Update user's cover image URL in the database
+
+  const user = await User.findByIdAndUpdate(req.user._id, {
+    $set: { coverImage: coverImage.url },
+  }).select("-password -refreshToken");
+
+  return res
+    .status(200)
+    .json(ApiResponse(200, user, "Cover image updated successfully"));
+});
 export {
   registerUser,
   loginUser,
@@ -257,4 +309,6 @@ export {
   changeCurrentPassword,
   getCurrentUser,
   updateAccountDetails,
+  updateUserAvatar,
+  updateUserCoverImage,
 };
