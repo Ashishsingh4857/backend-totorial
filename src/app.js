@@ -27,10 +27,12 @@ app.use(express.static("public"));
 app.use(cookieParser());
 
 //routes import
+import healthCheckRouter from "./routes/healthcheck.routes.js";
 import userRouter from "./routes/user.routes.js";
 
 //routes declaration
 app.use("/api/v1/users", userRouter); // path or handler
+app.use("/api/v1/healthcheck", healthCheckRouter);
 
 //example url -  http://localhost:3000/api/v1/users/register
 export { app, PORT };
