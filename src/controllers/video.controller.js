@@ -90,15 +90,14 @@ const updateVideo = asyncHandler(async (req, res) => {
   if (!updatedThumbnail?.url) {
     new ApiError(500, "something went wrong");
   }
-
+  // todo : delete old file from Cloudinary
   const video = await Video.findByIdAndUpdate(videoId, {
     $set: { thumbnail: updatedThumbnail.url },
   });
   if (!video) {
     new ApiError(500, "something went wrong while updating video");
   }
-  // todo : delete old file from Cloudinary
-  await destroyOnCloudinary(video.thumbnail);
+
   return res
     .status(200)
     .json(new ApiResponse(200, video, "video updated successfully"));
