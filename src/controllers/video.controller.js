@@ -71,6 +71,10 @@ const updateVideo = asyncHandler(async (req, res) => {
   //TODO: update video details like title, description, thumbnail
   if (!videoId) throw new ApiError(400, "VIDEO ID is required ");
 
+  //check video is exist
+  const videoExist = await Video.findById(videoId);
+  if (!videoExist) throw new ApiError(400, "video does not exist");
+  //files
   const thumbnailLocalPath = req.file?.path;
   if (!thumbnailLocalPath) throw new ApiError(400, "file is required");
 
