@@ -2,7 +2,10 @@ import { Video } from "../models/video.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  destroyOnCloudinary,
+  uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 const getAllVideos = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
   //TODO: get all videos based on query, sort, pagination
@@ -32,7 +35,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   // upload local files in Cloudinary
   const video = await uploadOnCloudinary(videoFileLocalPath);
   const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
-  if (!video.url) {
+  if (!video?.url) {
     new ApiError(500, "something went wrong");
   }
   if (!thumbnail.url) {
@@ -59,12 +62,46 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
 const getVideoById = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
-  //TODO: get video by id
+  if (!videoId) {
+    new ApiError(400, "VIDEO ID is required ");
+  }
+  //find in db
+  const video = await Video.findById(videoId);
+  if (!video) {
+    new ApiError(404, "video not found");
+  }
+  return res
+    .status(200)
+    .json(new ApiResponse(200, video, "video fetch successfully"));
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   //TODO: update video details like title, description, thumbnail
+  if (!videoId) {
+    new ApiError(400, "VIDEO ID is required ");
+  }
+  const thumbnailLocalPath = req.file?.path;
+  if (!thumbnailLocalPath) {
+    new ApiError(400, "file is required");
+  }
+  //update on Cloudinary
+  const updatedThumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+  if (!updatedThumbnail?.url) {
+    new ApiError(500, "something went wrong");
+  }
+
+  const video = await Video.findByIdAndUpdate(videoId, {
+    $set: { thumbnail: updatedThumbnail.url },
+  });
+  if (!video) {
+    new ApiError(500, "something went wrong while updating video");
+  }
+  // todo : delete old file from Cloudinary
+  await destroyOnCloudinary(video.thumbnail);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, video, "video updated successfully"));
 });
 
 const deleteVideo = asyncHandler(async (req, res) => {
