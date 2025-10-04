@@ -7,8 +7,64 @@ import {
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
 const getAllVideos = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
-  //TODO: get all videos based on query, sort, pagination
+  const {
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortType = -1,
+    title,
+    userId,
+    query,
+  } = req.query;
+
+  // get all videos based on query, sort, pagination
+  // Input Validation
+  if (isNaN(page) || page < 1) throw new ApiError(400, "Invalid page number");
+  if (isNaN(limit) || limit < 1)
+    throw new ApiError(400, "Invalid limit number");
+
+  const validSortFields = ["createdAt", "title", "userId"]; // Add more fields as needed
+  if (!validSortFields.includes(sortBy))
+    throw new ApiError(400, "Invalid sort field");
+
+  let mongoQuery = {};
+
+  if (query) {
+    // Assuming 'query' is a stringified JSON object
+    try {
+      const parsedQuery = JSON.parse(query);
+      // Now you can use parsedQuery in your MongoDB query
+      mongoQuery = { ...parsedQuery };
+    } catch (error) {
+      console.error("Error parsing query:", error);
+      throw new ApiError(400, "Invalid query format");
+    }
+  }
+
+  if (title) {
+    if (typeof title !== "string") {
+      throw new ApiError(400, "Invalid title format");
+    }
+    mongoQuery.title = title;
+  }
+  if (userId) mongoQuery.userId = userId;
+
+  // Pagination
+  const skip = (page - 1) * limit; // calculates how many items to skip
+
+  try {
+    const videos = await Video.find(mongoQuery)
+      .skip(skip)
+      .limit(limit)
+      .sort({ [sortBy]: sortType });
+    if (!videos) throw new ApiError(404, null, "no video found");
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, videos, "videos fetching successfully"));
+  } catch (error) {
+    throw new ApiError(500, "ERROR:fetching videos");
+  }
 });
 
 const publishAVideo = asyncHandler(async (req, res) => {
