@@ -7,6 +7,8 @@ import {
   destroyOnCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
+import { Like } from "../models/like.model.js";
+import { Comment } from "../models/comment.model.js";
 const getAllVideos = asyncHandler(async (req, res) => {
   const {
     page = 1,
@@ -166,15 +168,37 @@ const updateVideo = asyncHandler(async (req, res) => {
 
 const deleteVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
-  if (!videoId) throw new ApiError(400, "VIDEO ID is required ");
-
+  //check valid id
+  if (!isValidObjectId(videoId)) throw new ApiError(400, "Invalid videoId");
+  //existence check
   const videoExist = await Video.findById(videoId);
-
   if (!videoExist) throw new ApiError(400, "video does not exist");
-  await Video.deleteOne({ _id: videoExist?._id });
-  return res
-    .status(200)
-    .json(new ApiResponse(200, {}, "video deleted successfully"));
+
+  // ownership check
+  if (videoExist?.owner?.toString() !== req.user?._id.toString()) {
+    throw new ApiError(
+      400,
+      "you do not have permission to perform this action"
+    );
+  }
+  //delete video from db
+  try {
+    const deletedVideo = await Video.deleteOne({ _id: videoExist?._id });
+    if (!deletedVideo)
+      throw new ApiError(400, "Failed to delete the video please try again");
+    //delete from Cloudinary
+    await destroyOnCloudinary(videoExist?.videoFile?.public_id, "video"); // delete video
+    await destroyOnCloudinary(videoExist?.thumbnail?.public_id); // delete thumbnail
+    //delete other data related to video
+    await Like.deleteMany({ video: videoId });
+    await Comment.deleteMany({ video: videoId });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, deleteVideo, "video deleted successfully"));
+  } catch (error) {
+    throw new ApiError(500, "something went wrong", error);
+  }
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
