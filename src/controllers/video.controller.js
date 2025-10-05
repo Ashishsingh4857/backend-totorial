@@ -2,6 +2,7 @@ import { Video } from "../models/video.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { isValidObjectId } from "mongoose";
 import {
   destroyOnCloudinary,
   uploadOnCloudinary,
@@ -178,26 +179,42 @@ const deleteVideo = asyncHandler(async (req, res) => {
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
-  const { isPublished } = req.body;
-  if (!isPublished)
-    throw new ApiError(400, "isPublished parameter is required");
-  if (!videoId) throw new ApiError(400, "VIDEO ID is required ");
+  //check valid id
+  if (!isValidObjectId(videoId)) throw new ApiError(400, "Invalid videoId");
+
   //existence check
   const videoExist = await Video.findById(videoId);
   if (!videoExist) throw new ApiError(400, "video does not exist");
-  const updatedVideo = await Video.findByIdAndUpdate(videoExist?._id, {
-    $set: { isPublished: isPublished },
-  });
 
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        { isPublished: updatedVideo.isPublished },
-        "video publication status updated successfully"
-      )
+  // ownership check
+  if (videoExist?.owner?.toString() !== req.user?._id.toString()) {
+    throw new ApiError(
+      400,
+      "you do not have permission to perform this action"
     );
+  }
+  try {
+    //update the field
+    const updatedVideo = await Video.findByIdAndUpdate(
+      videoExist?._id,
+      {
+        $set: { isPublished: !videoExist?.isPublished },
+      },
+      { new: true }
+    );
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          { isPublished: updatedVideo.isPublished },
+          "video publication status updated successfully"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(500, "something went wrong", error);
+  }
 });
 
 export {
