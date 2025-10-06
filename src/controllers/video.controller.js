@@ -127,15 +127,119 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
 const getVideoById = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
-  if (!videoId) throw new ApiError(400, "VIDEO ID is required ");
+  if (!isValidObjectId(videoId)) throw new ApiError(400, "Invalid videoId");
 
   //find in db
   const videoExist = await Video.findById(videoId);
   if (!videoExist) throw new ApiError(404, "video not found");
+  try {
+    const video = await Video.aggregate([
+      //first pipeline
+      { $match: { _id: videoExist._id } },
+      //2nd pipeline
+      // join the Likes collection find all the likes documents
+      //  where the video field matches the _id of the current video
+      {
+        $lookup: {
+          from: "likes",
+          foreignField: "video",
+          localField: "_id",
+          as: "likes", // result are stored in array called "likes"
+        },
+      },
+      //3rd pipeline
+      // join the users collection to get the video owner information
+      //match the owner field of the video with users _id
+      {
+        $lookup: {
+          from: "users",
+          foreignField: "_id",
+          localField: "owner",
+          as: "owner",
+          //inside pipeline to  proses the owner data
+          //join the subscriptions collection  to find all subscribers of the channel
+          //match the _id of the owner with channel filed
+          pipeline: [
+            {
+              $lookup: {
+                from: "subscriptions",
+                foreignField: "channel",
+                localField: "_id",
+                as: "subscribers",
+              },
+            },
+            //this stage adds new fields to the owner document
+            {
+              $addFields: {
+                subscribersCount: {
+                  $size: "$subscribers", //calculate the number of subscribers on the subscribers array
+                },
+                //check if the current user is subscribed the channel
+                isSubscribed: {
+                  $cond: {
+                    if: {
+                      $in: [req.user?._id, "$subscribers.subscriber"], //check user is present in  / return boolean value
+                    },
+                    then: true,
+                    else: false,
+                  },
+                },
+              },
+            },
+            // stage to include/exclude specific fields from the final output in the owner array
+            {
+              $project: {
+                username: 1,
+                "avatar.url": 1,
+                subscribersCount: 1,
+                isSubscribed: 1,
+              },
+            },
+          ],
+        },
+      },
+      //stage to adds fields- likesCount, owner,isLiked
+      {
+        $addFields: {
+          likesCount: {
+            $size: "$likes",
+          },
+          owner: {
+            $first: "$owner",
+          },
+          isLiked: {
+            $cond: {
+              if: { $in: [req.user?._id, "$likes.likedBy"] },
+              then: true,
+              else: false,
+            },
+          },
+        },
+      },
+      // stage to include/exclude specific fields from the final output
+      {
+        $project: {
+          videoFile: 1,
+          thumbnail: 1,
+          title: 1,
+          description: 1,
+          views: 1,
+          createdAt: 1,
+          duration: 1,
+          comments: 1,
+          owner: 1,
+          likesCount: 1,
+          isLiked: 1,
+        },
+      },
+    ]);
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, videoExist, "video fetch successfully"));
+    return res
+      .status(200)
+      .json(new ApiResponse(200, video, "video fetch successfully"));
+  } catch (error) {
+    throw new ApiError(500, "something went wrong", error);
+  }
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
