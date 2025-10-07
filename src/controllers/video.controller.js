@@ -15,61 +15,109 @@ const getAllVideos = asyncHandler(async (req, res) => {
     limit = 10,
     sortBy = "createdAt",
     sortType = -1,
-    title,
     userId,
     query,
   } = req.query;
 
-  // get all videos based on query, sort, pagination
   // Input Validation
   if (isNaN(page) || page < 1) throw new ApiError(400, "Invalid page number");
   if (isNaN(limit) || limit < 1)
     throw new ApiError(400, "Invalid limit number");
 
-  const validSortFields = ["createdAt", "title", "userId"]; // Add more fields as needed
+  // Validate sortType
+  // if (sortType !== "asc" && sortType !== "desc")
+  //   throw new ApiError(400, "Invalid sort type");
+
+  // Validate sortBy
+  const validSortFields = ["createdAt", "title", "userId"];
   if (!validSortFields.includes(sortBy))
     throw new ApiError(400, "Invalid sort field");
 
-  let mongoQuery = {};
-
+  //pipeline construction
+  const pipeline = [];
+  //search stage
+  // for using Full Text based search u need to create a search index in mongoDB atlas
+  // you can include field mapppings in search index eg.title, description, as well
+  // Field mappings specify which fields within your documents should be indexed for text search.
+  // this helps in searching only in title, desc providing faster search results
+  // here the name of search index is 'search-videos'
   if (query) {
-    // Assuming 'query' is a stringified JSON object
-    try {
-      const parsedQuery = JSON.parse(query);
-      // Now you can use parsedQuery in your MongoDB query
-      mongoQuery = { ...parsedQuery };
-    } catch (error) {
-      console.error("Error parsing query:", error);
-      throw new ApiError(400, "Invalid query format");
-    }
+    console.log(query);
+    pipeline.push({
+      $search: {
+        index: "search-videos",
+        text: {
+          query: query,
+          path: ["title", "description"],
+        },
+      },
+    });
   }
-
-  if (title) {
-    if (typeof title !== "string") {
-      throw new ApiError(400, "Invalid title format");
-    }
-    mongoQuery.title = title;
+  //userId filter
+  if (userId) {
+    if (!isValidObjectId(userId)) throw new ApiError(400, "Invalid userId");
+    pipeline.push({ $match: { owner: new mongoose.Types.ObjectId(userId) } });
   }
-  if (userId) mongoQuery.userId = userId;
-
-  // Pagination
-  const skip = (page - 1) * limit; // calculates how many items to skip
+  //only published videos
+  pipeline.push({ $match: { isPublished: true } });
+  //populate owner details
+  pipeline.push({
+    $lookup: {
+      from: "users",
+      localField: "owner",
+      foreignField: "_id",
+      as: "ownerDetails", //return array ownerDetails:[{_id:",username:"",avatar:{url:""}}]
+      pipeline: [
+        {
+          $project: {
+            username: 1,
+            "avatar.url": 1,
+          },
+        },
+      ],
+    },
+  });
+  //unwind ownerDetails array to object
+  pipeline.push({ $unwind: "$ownerDetails" });
+  //sort stage
+  pipeline.push({
+    $sort: {
+      [sortBy]: sortType === "asc" ? 1 : -1,
+    },
+  });
+  //facet stage for pagination the total count of documents
+  pipeline.push({
+    $facet: {
+      metadata: [{ $count: "total" }],
+      data: [{ $skip: (page - 1) * limit }, { $limit: parseInt(limit) }],
+    },
+  });
 
   try {
-    const videos = await Video.find(mongoQuery)
-      .skip(skip)
-      .limit(limit)
-      .sort({ [sortBy]: sortType });
-    if (!videos) throw new ApiError(404, null, "no video found");
+    const result = await Video.aggregate(pipeline);
+    console.log(result);
 
-    return res
-      .status(200)
-      .json(new ApiResponse(200, videos, "videos fetching successfully"));
+    const video = result[0];
+    console.log(video);
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          videos: video.data,
+          pagination: {
+            currentPage: parseInt(page),
+            limit: parseInt(limit),
+            totalVideos: video.metadata[0] ? video.metadata[0].total : 0, // total videos count
+          },
+        },
+        "Videos fetched successfully"
+      )
+    );
   } catch (error) {
-    throw new ApiError(500, "ERROR:fetching videos");
+    throw new ApiError(500, "ERROR:fetching videos", error);
   }
 });
-
 const publishAVideo = asyncHandler(async (req, res) => {
   const { title, description } = req.body;
   if (!title) throw new ApiError(400, "title is required");
