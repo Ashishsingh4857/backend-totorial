@@ -4,10 +4,10 @@ import {
   getVideoComments,
   updateComment,
   deleteComment,
-} from "../controllers/comment.controller";
-import { verifyJWT } from "../middlewares/auth.middleware";
+} from "../controllers/comment.controller.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 const commentRouter = Router();
-app.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
+commentRouter.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
 commentRouter.route("/:videoId").get(getVideoComments).post(addComment);
 commentRouter.route("/c/:commentId").patch(updateComment).delete(deleteComment);
 export default commentRouter;
