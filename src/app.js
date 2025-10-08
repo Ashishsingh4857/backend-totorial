@@ -30,11 +30,13 @@ app.use(cookieParser());
 import healthCheckRouter from "./routes/healthcheck.routes.js";
 import userRouter from "./routes/user.routes.js";
 import videoRouter from "./routes/video.routes.js";
+import commentRouter from "./routes/comment.routes.js";
 
 //routes declaration
 app.use("/api/v1/users", userRouter); // path or handler
 app.use("/api/v1/healthcheck", healthCheckRouter);
 app.use("/api/v1/videos", videoRouter);
+app.use("/api/v1/comments", commentRouter);
 
 //example url -  http://localhost:3000/api/v1/users/register
 export { app, PORT };
