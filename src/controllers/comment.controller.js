@@ -1,13 +1,123 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Comment } from "../models/comment.model.js";
 import { Video } from "../models/video.model.js";
 const getVideoComments = asyncHandler(async (req, res) => {
-  //TODO: get all comments for a video
   const { videoId } = req.params;
   const { page = 1, limit = 10 } = req.query;
+
+  // Input validation
+  if (!isValidObjectId(videoId)) {
+    throw new ApiError(400, "Invalid videoId");
+  }
+
+  if (isNaN(page) || page < 1) throw new ApiError(400, "Invalid page number");
+  if (isNaN(limit) || limit < 1)
+    throw new ApiError(400, "Invalid limit number");
+
+  // Check if video exists
+  const video = await Video.findById(videoId);
+  if (!video) {
+    throw new ApiError(404, "Video not found");
+  }
+
+  // Pipeline construction
+  const pipeline = [
+    //1st pipeline
+    //This stage filters the comments to only include those that belong to the specified video.
+    { $match: { video: new mongoose.Types.ObjectId(videoId) } },
+    //2nd pipeline
+    //join the users collection to populate the owner field.
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "owner",
+        as: "owner",
+      },
+    },
+    //3rd pipeline
+    //join with the likes collection to populate the likes field.
+    {
+      $lookup: {
+        from: "likes",
+        foreignField: "comment",
+        localField: "_id",
+        as: "likes",
+      },
+    },
+    //4th pipeline
+    //
+    {
+      $addFields: {
+        likesCount: { $size: "$likes" },
+        owner: { $first: "$owner" },
+        isLiked: {
+          $cond: {
+            if: { $in: [req.user?._id, "$likes.likedBy"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    //5th pipeline
+    { $sort: { createdAt: -1 } },
+    //6th pipeline
+    // This stage divides the pipeline into two branches: metadata and data. The metadata branch calculates the total count of comments, while the data branch paginates the comments.
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [
+          { $skip: (page - 1) * limit },
+          { $limit: parseInt(limit) },
+          {
+            $project: {
+              content: 1,
+              createdAt: 1,
+              likesCount: 1,
+              owner: {
+                username: 1,
+                fullName: 1,
+                "avatar.url": 1,
+              },
+              isLiked: 1,
+            },
+          },
+        ],
+      },
+    },
+  ];
+
+  try {
+    const comments = await Comment.aggregate(pipeline);
+    if (!comments || comments[0].data.length === 0) {
+      throw new ApiError(404, "No comments found");
+    }
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          comments: comments[0].data,
+          pagination: {
+            currentPage: parseInt(page),
+            limit: parseInt(limit),
+            totalComments: comments[0].metadata[0].total,
+          },
+        },
+        "Comments fetched successfully"
+      )
+    );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Internal server error while fetching comments",
+      error
+    );
+  }
 });
 
 const addComment = asyncHandler(async (req, res) => {
