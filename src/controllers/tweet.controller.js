@@ -1,6 +1,6 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Tweet } from "../models/tweet.model.js";
-import { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 const createTweet = asyncHandler(async (req, res) => {
@@ -30,7 +30,102 @@ const createTweet = asyncHandler(async (req, res) => {
 });
 
 const getUserTweets = asyncHandler(async (req, res) => {
-  // TODO: get user tweets
+  const { userId } = req.params;
+  // Input validation
+  if (!isValidObjectId(userId)) {
+    throw new ApiError(400, "Invalid userId");
+  }
+
+  const pipeline = [
+    {
+      $match: {
+        owner: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    //join the users collection
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "ownerDetails",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              "avatar.url": 1,
+            },
+          },
+        ],
+      },
+    },
+    //join the likes collection
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "tweet",
+        as: "likeDetails", //return array
+        pipeline: [
+          {
+            $project: {
+              likedBy: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        likesCount: {
+          $size: "$likeDetails", //count the likeDetails array
+        },
+        ownerDetails: {
+          $first: "$ownerDetails", //add the first value of ownerDetails []
+        },
+        isLiked: {
+          $cond: {
+            if: { $in: [req.user?._id, "$likeDetails.likedBy"] }, //match the user  in like likeDetails.likedBy
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    //sort by
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+    //field to include
+    {
+      $project: {
+        content: 1,
+        ownerDetails: 1,
+        likesCount: 1,
+        createdAt: 1,
+        isLiked: 1,
+      },
+    },
+  ];
+  try {
+    const userTweets = await Tweet.aggregate(pipeline);
+
+    if (!userTweets || userTweets?.length === 0) {
+      throw new ApiError(404, "No tweets found for the given user");
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, userTweets, "Tweets fetched successfully"));
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "internal server error while fetching tweet",
+      error
+    );
+  }
 });
 
 const updateTweet = asyncHandler(async (req, res) => {
