@@ -81,7 +81,81 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
 });
 
 const getLikedVideos = asyncHandler(async (req, res) => {
-  //TODO: get all liked videos
+  //pipeline
+  const pipeline = [
+    {
+      $match: {
+        "likedBy._id": req.user._id, //logged in user
+        video: { $exists: true },
+      },
+    },
+    {
+      $lookup: {
+        from: "videos", //join the video collection
+        foreignField: "_id",
+        localField: "video",
+        as: "LikedVideos",
+        pipeline: [
+          //join the user collection to populate owner
+          {
+            $lookup: {
+              from: "users",
+              foreignField: "_id",
+              localField: "owner",
+              as: "ownerDetails",
+              pipeline: [
+                //field to include
+                {
+                  $project: {
+                    username: 1,
+                    fullName: 1,
+                    "avatar.url": 1,
+                  },
+                },
+              ],
+            },
+          },
+
+          {
+            $unwind: "$ownerDetails",
+          },
+        ],
+      },
+    },
+    {
+      $unwind: "$LikedVideos",
+    },
+    {
+      //field to include
+      $project: {
+        _id: "$LikedVideos._id",
+        title: "$LikedVideos.title",
+        description: "$LikedVideos.description",
+        videoFile: "$LikedVideos.videoFile",
+        thumbnail: "$LikedVideos.thumbnail",
+        owner: "$LikedVideos.owner",
+        ownerDetails: "$LikedVideos.ownerDetails",
+        duration: "$LikedVideos.duration",
+        views: "$LikedVideos.views",
+        isPublished: "$LikedVideos.isPublished",
+        createdAt: "$LikedVideos.createdAt",
+        updatedAt: "$LikedVideos.updatedAt",
+      },
+    },
+  ];
+
+  try {
+    const videos = await Like.aggregate(pipeline);
+    if (videos.length === 0) {
+      return res.status(200).json(new ApiResponse(200, [], "No video found"));
+    }
+    return res
+      .status(200)
+      .json(new ApiResponse(200, videos, "Liked videos fetched successfully"));
+  } catch (error) {
+    console.error("Error fetching liked videos:", error);
+    throw new ApiError(500, "Internal server error", error);
+  }
 });
 
 export { toggleCommentLike, toggleTweetLike, toggleVideoLike, getLikedVideos };
