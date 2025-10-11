@@ -15,7 +15,15 @@ const toggleLike = async (req, res, type, id) => {
   }
 
   // Existence check
-  const model = type === "video" ? Video : type === "comment" ? Comment : Tweet;
+  const model =
+    type === "video"
+      ? Video
+      : type === "comment"
+        ? Comment
+        : type === "tweet"
+          ? Tweet
+          : null;
+
   const item = await model.findById(id);
   if (!item) {
     throw new ApiError(404, `${type} not found`);
@@ -77,7 +85,7 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
 const toggleTweetLike = asyncHandler(async (req, res) => {
   const { tweetId } = req.params;
 
-  await toggleLike(req, res, "Tweet", tweetId);
+  await toggleLike(req, res, "tweet", tweetId);
 });
 
 const getLikedVideos = asyncHandler(async (req, res) => {
