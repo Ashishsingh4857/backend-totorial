@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Playlist } from "../models/playlist.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Video } from "../models/video.model.js";
+import { User } from "../models/user.model.js";
 const createPlaylist = asyncHandler(async (req, res) => {
   const { name, description } = req.body;
   //input validation
@@ -29,7 +30,52 @@ const createPlaylist = asyncHandler(async (req, res) => {
 
 const getUserPlaylists = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  //TODO: get user playlists
+
+  // Input validation
+  if (!isValidObjectId(userId)) {
+    throw new ApiError(400, "Invalid userId");
+  }
+
+  // User existence check
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  let pipeline = [
+    {
+      $match: { owner: new mongoose.Types.ObjectId(userId) },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        foreignField: "_id",
+        localField: "videos",
+        as: "videos",
+      },
+    },
+  ];
+
+  try {
+    const userPlaylists = await Playlist.aggregate(pipeline);
+    // when the user has no playlists
+    if (userPlaylists.length === 0) {
+      return res
+        .status(200)
+        .json(new ApiResponse(200, [], "User has no playlists"));
+    }
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, userPlaylists, "Playlists fetched successfully")
+      );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Internal server error. While fetching playlists",
+      error
+    );
+  }
 });
 
 const getPlaylistById = asyncHandler(async (req, res) => {
@@ -57,7 +103,11 @@ const getPlaylistById = asyncHandler(async (req, res) => {
   try {
     const result = await Playlist.aggregate(pipeline);
     if (result.length === 0) {
-      throw new ApiError(404, "We can't find playlist with this Id");
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(404, null, "We can't find playlist with this Id")
+        );
     }
 
     return res
@@ -204,13 +254,80 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
 });
 const deletePlaylist = asyncHandler(async (req, res) => {
   const { playlistId } = req.params;
-  // TODO: delete playlist
+  // Input validation
+  if (!isValidObjectId(playlistId)) {
+    throw new ApiError(400, "Invalid playlistId");
+  }
+
+  // Existence check
+  const playlist = await Playlist.findById(playlistId);
+  if (!playlist) {
+    throw new ApiError(404, "Playlist not found");
+  }
+
+  // Check if the current user is the owner of the playlist
+  if (playlist.owner.toString() !== req.user?._id.toString()) {
+    throw new ApiError(403, "You are not authorized to perform this action");
+  }
+  try {
+    await Playlist.deleteOne({ _id: playlistId, owner: req.user?._id });
+    return res
+      .status(403)
+      .json(new ApiResponse(200, null, "playlist deleted successfully"));
+  } catch (error) {
+    throw new ApiError(
+      403,
+      "internal server error.failed to delete playlist",
+      error
+    );
+  }
 });
 
 const updatePlaylist = asyncHandler(async (req, res) => {
   const { playlistId } = req.params;
   const { name, description } = req.body;
-  //TODO: update playlist
+  if (!name) throw new ApiError(400, "name field is required");
+  if (!description) throw new ApiError(400, "description field is required");
+
+  // Input validation
+  if (!isValidObjectId(playlistId)) {
+    throw new ApiError(400, "Invalid playlistId");
+  }
+
+  // Existence check
+  const playlist = await Playlist.findById(playlistId);
+  if (!playlist) {
+    throw new ApiError(404, "We can't find playlist with this Id");
+  }
+  // Check if the current user is the owner of the playlist
+  if (playlist.owner.toString() !== req.user?._id.toString()) {
+    throw new ApiError(
+      403,
+      "You are not authorized to add videos to this playlist"
+    );
+  }
+  //update in db
+  try {
+    const updatedPlaylist = await Playlist.findByIdAndUpdate(
+      playlistId,
+      {
+        name,
+        description,
+      },
+      { new: true }
+    );
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, updatedPlaylist, "playlist  updated successfully")
+      );
+  } catch (error) {
+    throw new ApiError(
+      403,
+      "internal server error.failed to update playlist",
+      error
+    );
+  }
 });
 export {
   createPlaylist,
