@@ -21,16 +21,6 @@ const generateAccessAndRefreshTokens = async (userId) => {
   }
 };
 const registerUser = asyncHandler(async (req, res) => {
-  // get user details from frontend
-  // validation - not empty
-  // check if user already exists: username, email
-  // check for images, check for avatar
-  // upload them to cloudinary, avatar
-  // create user object - create entry in db
-  // remove password and refresh token field from response
-  // check for user creation
-  // return res
-
   const { fullName, email, username, password } = req.body;
   if (
     // validation - not empty
@@ -226,24 +216,32 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 
 //get current user
 const getCurrentUser = asyncHandler(async (req, res) => {
+  const user = req.user.toJSON();
+  delete user.password;
+  delete user.refreshToken;
   return res
     .status(200)
-    .json(new ApiResponse(200, req.user, "User fetched successfully"));
+    .json(new ApiResponse(200, user, "User fetched successfully"));
 });
 
 // Update user account details (e.g., fullName, username, email)
 const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullName, username, email } = req.body;
-  if (!fullName || !username || !email) {
+  if (!fullName && !username && !email) {
     throw new ApiError(400, "At least one field is required to update");
   }
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
-      $set: { email: email, fullName: fullName },
+      $set: {
+        email: email,
+        fullName: fullName,
+        username: username, // add this line
+      },
     },
-    { new: true } // return the updated document
-  ).select("-password -refreshToken"); // Exclude password from the response
+    { new: true }
+  ).select("-password -refreshToken");
+  // Exclude password from the response
 
   if (!user) {
     throw new ApiError(500, "Something went wrong while updating user");
@@ -378,9 +376,14 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       new ApiResponse(200, channel[0], "User channel fetched successfully")
     );
 });
+
 const getWatchHistory = asyncHandler(async (req, res) => {
-  const user = User.aggregate([
-    { $match: { _id: new mongoose.Types.ObjectId(req.user._id) } },
+  const user = await User.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(req.user._id),
+      },
+    },
     {
       $lookup: {
         from: "videos",
@@ -396,20 +399,26 @@ const getWatchHistory = asyncHandler(async (req, res) => {
               as: "owner",
               pipeline: [
                 {
-                  $project: { fullName: 1, username: 1, avatar: 1 },
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1,
+                    _id: 1,
+                  },
                 },
               ],
             },
           },
-        ],
-        $addFields: {
-          owner: {
-            $first: "$owner",
+          {
+            $addFields: {
+              owner: { $first: "$owner" },
+            },
           },
-        },
+        ],
       },
     },
   ]);
+
   return res
     .status(200)
     .json(
