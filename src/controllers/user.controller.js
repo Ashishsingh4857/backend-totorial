@@ -304,21 +304,15 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
   if (!username?.trim()) {
     throw new ApiError(400, "username is missing");
   }
-  // aggregation pipeline
-  // 1. match user by username
-  // 2. lookup in subscriptions collection where localField: _id, foreignField: channel
-  // 3. lookup in subscriptions collection where localField: _id, foreignField: subscriber
-  // 4. addFields -> subscribersCount, channelsSubscribedToCount, isSubscribed
-  // 5. project -> fullName, username, subscribersCount, channelsSubscribedToCount, isSubscribed, avatar, coverImage
 
-  // return res.send("ok");
-  const { _id } = User; // Model ObjectId
-  // Aggregate method returns an array of results
   const channel = await User.aggregate([
-    { $match: { username: username.toLowerCase() } },
+    {
+      $match: {
+        username: username.toLowerCase(),
+      },
+    },
     {
       $lookup: {
-        // first lookup
         from: "subscriptions",
         localField: "_id",
         foreignField: "channel",
@@ -327,7 +321,6 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     },
     {
       $lookup: {
-        // second lookup
         from: "subscriptions",
         localField: "_id",
         foreignField: "subscriber",
@@ -335,8 +328,15 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       },
     },
     {
+      $lookup: {
+        from: "videos",
+        localField: "_id",
+        foreignField: "owner",
+        as: "videos",
+      },
+    },
+    {
       $addFields: {
-        // create new fields
         subscribersCount: {
           $size: "$subscribers",
         },
@@ -350,11 +350,13 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
             else: false,
           },
         },
+        totalVideos: {
+          $size: "$videos",
+        },
       },
     },
     {
       $project: {
-        // include only these fields in result
         fullName: 1,
         username: 1,
         subscribersCount: 1,
@@ -363,6 +365,9 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
         avatar: 1,
         coverImage: 1,
         email: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        totalVideos: 1,
       },
     },
   ]);
@@ -370,6 +375,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
   if (!channel?.length) {
     throw new ApiError(404, "channel does not exists");
   }
+
   return res
     .status(200)
     .json(
